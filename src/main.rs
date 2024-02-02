@@ -41,6 +41,7 @@ struct Game {
     players: Vec<Player>,
     current_card: Option<Card>,
     deck: Vec<Card>,
+    current_player: usize,
 }
 
 impl Game {
@@ -61,6 +62,7 @@ impl Game {
             players,
             current_card: None,  // Start the game with a card from the deck
             deck,
+            current_player: 0,
         };
     
         game.shuffle_and_deal();
@@ -102,6 +104,7 @@ impl Game {
         deck.shuffle(&mut rand::thread_rng());
     }
 
+    #[allow(dead_code)]
     fn print_all_hands(&self) {
         for player in &self.players {
             println!("{}'s hand:", player.name);
@@ -110,7 +113,21 @@ impl Game {
             } println!();
             println!();  // Print an empty line for better readability
         }
-    }    
+    }
+
+    fn next_turn(&mut self) {
+        self.current_player = (self.current_player + 1) % self.players.len();
+    }
+
+    fn print_current_hand(&self) {
+        let player = &self.players[self.current_player];
+        println!("{}'s hand:", player.name);
+        for card in &player.hand.cards {
+            print!("|{}{}|  ", card.number, card.color.as_char());
+        }
+        println!();
+    }
+       
 }
 
 fn main() {
@@ -127,10 +144,15 @@ fn main() {
             Err(_) => println!("Invalid Input."),
         }
     };
-    println!();
 
-    let game = Game::new(num_players);
-    game.print_all_hands();
+    let mut game = Game::new(num_players);
+    
+    for _i in 0..num_players {
+        println!();
+        game.print_current_hand();
+        game.next_turn();
+        println!("Next Player");
+    }
 }
 
 fn get_user_input() -> String {
