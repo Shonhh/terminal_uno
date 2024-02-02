@@ -127,8 +127,9 @@ fn main() {
             Err(_) => println!("Invalid Input."),
         }
     };
+    println!();
 
-    let mut game = Game::new(num_players);
+    let game = Game::new(num_players);
     game.print_all_hands();
 }
 
