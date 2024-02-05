@@ -1,5 +1,6 @@
 use std::io::{self, *};
 use rand::seq::SliceRandom;
+use eframe::{egui::{self, RichText}, epaint::Color32};
 
 #[derive(Debug)]
 struct Card {
@@ -28,6 +29,7 @@ impl Color {
     }
 }
 
+#[derive(Debug)]
 struct Hand {
     cards: Vec<Card>
 }
@@ -119,18 +121,21 @@ impl Game {
         self.current_player = (self.current_player + 1) % self.players.len();
     }
 
-    fn print_current_hand(&self) {
+    fn print_current_hand(&self) -> Vec<String> {
         let player = &self.players[self.current_player];
-        println!("{}'s hand:", player.name);
-        for card in &player.hand.cards {
-            print!("|{}{}|  ", card.number, card.color.as_char());
-        }
-        println!();
-    }
-       
+        player.hand.cards.iter().map(|card| format!("|{}|", card.number)).collect()
+    }    
 }
 
-fn main() {
+fn main() -> eframe::Result<()> {
+    env_logger::init(); 
+
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        ..Default::default()
+    };
+
+
     let num_players: usize = loop {
         print!("How many players? (2-10): ");
         io::stdout().flush().unwrap();
@@ -147,12 +152,36 @@ fn main() {
 
     let mut game = Game::new(num_players);
     
-    for _i in 0..num_players {
-        println!();
-        game.print_current_hand();
-        game.next_turn();
-        println!("Next Player");
-    }
+    println!();
+    game.print_current_hand();
+    println!("Next Player");
+
+    eframe::run_simple_native("Uno", options, move |ctx, _frame| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("This is Uno");
+            ui.horizontal(|ui| {
+                for (i, card) in game.print_current_hand().iter().enumerate() {
+                    ui.label(
+                        RichText::new(card)
+                            .background_color(match game.players[game.current_player].hand.cards[i].color {
+                                Color::Red => Color32::RED,
+                                Color::Blue => Color32::BLUE,
+                                Color::Yellow => Color32::YELLOW,
+                                Color::Green => Color32::GREEN,
+                                Color::Black => Color32::BLACK,
+                            })
+                            .color(match game.players[game.current_player].hand.cards[i].color {
+                                Color::Red => Color32::WHITE,
+                                Color::Blue => Color32::WHITE,
+                                Color::Yellow => Color32::BLACK,
+                                Color::Green => Color32::BLACK,
+                                Color::Black => Color32::WHITE,
+                        })
+                    );
+                }
+            });
+        });
+    })
 }
 
 fn get_user_input() -> String {
