@@ -1,11 +1,11 @@
-use std::io::{self, *};
+use std::io::{self, Write};
 use rand::seq::SliceRandom;
 use eframe::{egui::{self, RichText}, epaint::Color32};
 
 #[derive(Debug)]
 struct Card {
-    number: String,  // Number or Letter (R for Reverse, W for Wild, etc)
-    color: Color,  // Color
+    number: String,
+    color: Color,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -15,18 +15,6 @@ enum Color {
     Yellow,
     Green,
     Black,
-}
-
-impl Color {
-    fn as_char(&self) -> char {
-        match self {
-            Color::Red => '🟥',
-            Color::Blue => '🟦',
-            Color::Yellow => '🟨',
-            Color::Green => '🟩',
-            Color::Black => '⬛',
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -48,80 +36,59 @@ struct Game {
 
 impl Game {
     fn new(num_players: usize) -> Game {
-        let mut players = Vec::new();
-        for i in 0..num_players {
-            let player = Player {
-                name: format!("Player {}", i + 1),
-                hand: Hand { cards: Vec::new() },
-            };
-            players.push(player);
-        }
-    
+        let players = (0..num_players).map(|i| Player {
+            name: format!("Player {}", i + 1),
+            hand: Hand { cards: Vec::new() },
+        }).collect();
+
         let mut deck = Vec::new();
         Game::initialize_deck(&mut deck);
-    
+
         let mut game = Game {
             players,
-            current_card: None,  // Start the game with a card from the deck
+            current_card: None,
             deck,
             current_player: 0,
         };
-    
-        game.shuffle_and_deal();
-    
+
+        game.deal_cards();
         game
     }    
 
-    fn shuffle_and_deal(&mut self) {
-        self.deck.shuffle(&mut rand::thread_rng());
+    fn deal_cards(&mut self) {
         for player in &mut self.players {
-            for _ in 0..7 {
-                let card = self.deck.pop().unwrap();
-                player.hand.cards.push(card);
-            }
+            player.hand.cards.extend(self.deck.drain(..7));
         }
-        self.current_card = Some(self.deck.pop().unwrap());
+        self.current_card = self.deck.pop();
     }
 
     fn initialize_deck(deck: &mut Vec<Card>) {
         deck.clear();
         let colors = [Color::Red, Color::Blue, Color::Yellow, Color::Green];
-    
+
         for color in colors.iter() {
             deck.push(Card { number: "0".to_string(), color: *color});
             for num in 1..=9 {
-                for _i in 0..2 {
-                    deck.push(Card { number: num.to_string(), color: *color});
-                }
+                deck.extend((0..2).map(|_| Card { number: num.to_string(), color: *color}));
             }
-    
-            for _i in 0..2 {
-                deck.push(Card { number: "Draw_2".to_string(), color: *color});
-                deck.push(Card { number: "Reverse".to_string(), color: *color});
-                deck.push(Card { number: "Skip".to_string(), color: *color});
-            }
+
+            deck.extend((0..2).map(|_| Card { number: "Draw_2".to_string(), color: *color}));
+            deck.extend((0..2).map(|_| Card { number: "Reverse".to_string(), color: *color}));
+            deck.extend((0..2).map(|_| Card { number: "Skip".to_string(), color: *color}));
+
             deck.push(Card { number: "Wild_+4".to_string(), color: Color::Black});
             deck.push(Card { number: "Wild".to_string(), color: Color::Black});
         }
         deck.shuffle(&mut rand::thread_rng());
     }
 
-    #[allow(dead_code)]
-    fn print_all_hands(&self) {
-        for player in &self.players {
-            println!("{}'s hand:", player.name);
-            for card in &player.hand.cards {
-                print!("|{}{}|  ", card.number, card.color.as_char());
-            } println!();
-            println!();  // Print an empty line for better readability
-        }
-    }
+    // fn shuffle_deck_from_discard() {}
 
     fn next_turn(&mut self) {
         self.current_player = (self.current_player + 1) % self.players.len();
     }
 
-    fn print_current_hand(&self) -> Vec<String> {
+    fn get_current_hand_tool(&self) -> Vec<String> {
         let player = &self.players[self.current_player];
         player.hand.cards.iter().map(|card| format!("|{}|", card.number)).collect()
     }    
@@ -131,12 +98,66 @@ fn main() -> eframe::Result<()> {
     env_logger::init(); 
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([380.0, 262.0]),
         ..Default::default()
     };
 
+    let num_players = get_num_players();
 
-    let num_players: usize = loop {
+    let mut game = Game::new(num_players);
+    
+    println!("Next Player");
+
+    eframe::run_simple_native("Uno", options, move |ctx, _frame| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("This is Uno");
+            ui.vertical(|ui| {
+                for player_index in 0..game.players.len() {
+                    ui.horizontal(|ui| {
+                        let hand = get_current_hand(&game);
+                        let player = &game.players[player_index];
+                        display_player_hand(ui, player, &hand);
+                    });
+                    game.next_turn();
+                }; 
+            });
+        });
+    })
+}
+
+fn display_player_hand(ui: &mut egui::Ui, player: &Player, hand: &[String]) {
+    ui.label(format!("{}:", player.name));
+    for (i, card) in hand.iter().enumerate() {
+        let card_color = match player.hand.cards[i].color {
+            Color::Red => Color32::WHITE,
+            Color::Blue => Color32::WHITE,
+            Color::Yellow => Color32::BLACK,
+            Color::Green => Color32::BLACK,
+            Color::Black => Color32::WHITE,
+        };
+
+        let color = match player.hand.cards[i].color {
+            Color::Red => Color32::RED,
+            Color::Blue => Color32::BLUE,
+            Color::Yellow => Color32::YELLOW,
+            Color::Green => Color32::GREEN,
+            Color::Black => Color32::BLACK,
+        };
+
+        ui.label(
+            RichText::new(card)
+                .background_color(color)
+                .color(card_color)
+        );
+    }                
+}
+
+fn get_current_hand(game: &Game) -> Vec<String> {
+    game.get_current_hand_tool()
+}
+
+fn get_num_players() -> usize {
+    loop {
         print!("How many players? (2-10): ");
         io::stdout().flush().unwrap();
 
@@ -144,44 +165,12 @@ fn main() -> eframe::Result<()> {
             Ok(value) => {
                 if value >= 2 && value <= 10 {
                     break value;
-                } println!("You can only have 2-10 players.");
+                } 
+                println!("You can only have 2-10 players.");
             }
             Err(_) => println!("Invalid Input."),
         }
-    };
-
-    let mut game = Game::new(num_players);
-    
-    println!();
-    game.print_current_hand();
-    println!("Next Player");
-
-    eframe::run_simple_native("Uno", options, move |ctx, _frame| {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("This is Uno");
-            ui.horizontal(|ui| {
-                for (i, card) in game.print_current_hand().iter().enumerate() {
-                    ui.label(
-                        RichText::new(card)
-                            .background_color(match game.players[game.current_player].hand.cards[i].color {
-                                Color::Red => Color32::RED,
-                                Color::Blue => Color32::BLUE,
-                                Color::Yellow => Color32::YELLOW,
-                                Color::Green => Color32::GREEN,
-                                Color::Black => Color32::BLACK,
-                            })
-                            .color(match game.players[game.current_player].hand.cards[i].color {
-                                Color::Red => Color32::WHITE,
-                                Color::Blue => Color32::WHITE,
-                                Color::Yellow => Color32::BLACK,
-                                Color::Green => Color32::BLACK,
-                                Color::Black => Color32::WHITE,
-                        })
-                    );
-                }
-            });
-        });
-    })
+    }
 }
 
 fn get_user_input() -> String {
