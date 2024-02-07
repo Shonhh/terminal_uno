@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::fmt;
 use rand::seq::SliceRandom;
 use eframe::{egui::{self, RichText}, epaint::Color32};
 
@@ -6,6 +7,44 @@ use eframe::{egui::{self, RichText}, epaint::Color32};
 struct Card {
     number: String,
     color: Color,
+}
+
+struct Deck { cards: Vec<Card> }
+
+impl Deck {
+    fn new() -> Deck { 
+        let mut deck = Deck { cards: Vec::new() };
+        deck.initialize();
+        deck.shuffle();
+        deck
+    }
+
+    fn initialize(&mut self) {
+        self.cards.clear();
+        let colors = [Color::Red, Color::Blue, Color::Yellow, Color::Green];
+
+        for color in colors.iter() {
+            self.cards.push(Card { number: "0".to_string(), color: *color});
+            for num in 1..=9 {
+                self.cards.extend((0..2).map(|_| Card { number: num.to_string(), color: *color}));
+            }
+
+            self.cards.extend((0..2).map(|_| Card { number: "Draw_2".to_string(), color: *color}));
+            self.cards.extend((0..2).map(|_| Card { number: "Reverse".to_string(), color: *color}));
+            self.cards.extend((0..2).map(|_| Card { number: "Skip".to_string(), color: *color}));
+
+            self.cards.push(Card { number: "Wild_+4".to_string(), color: Color::Black});
+            self.cards.push(Card { number: "Wild".to_string(), color: Color::Black});
+        }
+    }
+
+    fn shuffle(&mut self) {
+        self.cards.shuffle(&mut rand::thread_rng());
+    }
+
+    fn deal(&mut self, num_cards: usize) -> Vec<Card> {
+        self.cards.drain(..num_cards).collect()
+    }
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -30,7 +69,7 @@ struct Player {
 struct Game {
     players: Vec<Player>,
     current_card: Option<Card>,
-    deck: Vec<Card>,
+    deck: Deck,
     current_player: usize,
 }
 
@@ -41,8 +80,7 @@ impl Game {
             hand: Hand { cards: Vec::new() },
         }).collect();
 
-        let mut deck = Vec::new();
-        Game::initialize_deck(&mut deck);
+        let mut deck = Deck::new();
 
         let mut game = Game {
             players,
@@ -57,29 +95,8 @@ impl Game {
 
     fn deal_cards(&mut self) {
         for player in &mut self.players {
-            player.hand.cards.extend(self.deck.drain(..7));
+            player.hand = Hand { cards: self.deck.deal(7) };
         }
-        self.current_card = self.deck.pop();
-    }
-
-    fn initialize_deck(deck: &mut Vec<Card>) {
-        deck.clear();
-        let colors = [Color::Red, Color::Blue, Color::Yellow, Color::Green];
-
-        for color in colors.iter() {
-            deck.push(Card { number: "0".to_string(), color: *color});
-            for num in 1..=9 {
-                deck.extend((0..2).map(|_| Card { number: num.to_string(), color: *color}));
-            }
-
-            deck.extend((0..2).map(|_| Card { number: "Draw_2".to_string(), color: *color}));
-            deck.extend((0..2).map(|_| Card { number: "Reverse".to_string(), color: *color}));
-            deck.extend((0..2).map(|_| Card { number: "Skip".to_string(), color: *color}));
-
-            deck.push(Card { number: "Wild_+4".to_string(), color: Color::Black});
-            deck.push(Card { number: "Wild".to_string(), color: Color::Black});
-        }
-        deck.shuffle(&mut rand::thread_rng());
     }
 
     // fn shuffle_deck_from_discard() {}
@@ -87,11 +104,6 @@ impl Game {
     fn next_turn(&mut self) {
         self.current_player = (self.current_player + 1) % self.players.len();
     }
-
-    fn get_current_hand_tool(&self) -> Vec<String> {
-        let player = &self.players[self.current_player];
-        player.hand.cards.iter().map(|card| format!("|{}|", card.number)).collect()
-    }    
 }
 
 fn main() -> eframe::Result<()> {
@@ -119,8 +131,8 @@ fn main() -> eframe::Result<()> {
                         display_player_hand(ui, player, &hand);
                     });
                     game.next_turn();
-                }; 
-            });
+                } 
+            })
         });
     })
 }
@@ -153,7 +165,8 @@ fn display_player_hand(ui: &mut egui::Ui, player: &Player, hand: &[String]) {
 }
 
 fn get_current_hand(game: &Game) -> Vec<String> {
-    game.get_current_hand_tool()
+    let player = &game.players[game.current_player];
+    player.hand.cards.iter().map(|card| format!("|{}|", card.number)).collect()
 }
 
 fn get_num_players() -> usize {
