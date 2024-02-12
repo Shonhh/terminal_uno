@@ -1,5 +1,4 @@
 use std::io::{self, Write};
-use std::fmt;
 use rand::seq::SliceRandom;
 use eframe::{egui::{self, RichText}, epaint::Color32};
 
@@ -66,10 +65,16 @@ struct Player {
     hand: Hand
 }
 
+enum GameStatus {
+    PlayerWon(String),
+    GameContinues,
+}
+
 struct Game {
     players: Vec<Player>,
     current_card: Option<Card>,
     deck: Deck,
+    discard_pile: Deck,
     current_player: usize,
 }
 
@@ -86,6 +91,7 @@ impl Game {
             players,
             current_card: None,
             deck,
+            discard_pile: Deck { cards: Vec::new() },
             current_player: 0,
         };
 
@@ -104,18 +110,36 @@ impl Game {
     fn next_turn(&mut self) {
         self.current_player = (self.current_player + 1) % self.players.len();
     }
+
+    // Filler code, no logic yet.
+    fn play_card(&mut self) -> GameStatus {
+        let card = self.players[self.current_player].hand.cards.pop();
+
+        match card {
+            Some(card) => {
+                self.discard_pile.cards.push(card);
+
+                if self.players[self.current_player].hand.cards.is_empty() {
+                    GameStatus::PlayerWon(self.players[self.current_player].name.clone())
+                } else {
+                    GameStatus::GameContinues
+                }
+            },
+            None => GameStatus::GameContinues,
+        }
+    }
 }
 
 fn main() -> eframe::Result<()> {
     env_logger::init(); 
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([380.0, 262.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 262.0]),
         ..Default::default()
     };
 
     let num_players = get_num_players();
-
+    
     let mut game = Game::new(num_players);
     
     println!("Next Player");
@@ -123,45 +147,68 @@ fn main() -> eframe::Result<()> {
     eframe::run_simple_native("Uno", options, move |ctx, _frame| {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("This is Uno");
+            // Container Row
             ui.vertical(|ui| {
-                for player_index in 0..game.players.len() {
+                // Player Row
+                for i in 0..game.players.len() {
                     ui.horizontal(|ui| {
                         let hand = get_current_hand(&game);
-                        let player = &game.players[player_index];
-                        display_player_hand(ui, player, &hand);
+                        let player = &game.players[i];
+                        display_player_hand(ui, player, &hand, &game);
                     });
-                    game.next_turn();
-                } 
+                }
+
+                // Button Row
+                ui.horizontal( |ui| {
+                    if ui.button("Next Turn").clicked() {
+                        game.next_turn();
+                    }
+                    if ui.button("Play Card").clicked() {
+                        match game.play_card() {
+                            GameStatus::PlayerWon(name) => println!("{} won!!", name),
+                            GameStatus::GameContinues => (),
+                        }
+                    }
+                })
             })
         });
-    })
+    })    
 }
 
-fn display_player_hand(ui: &mut egui::Ui, player: &Player, hand: &[String]) {
+fn display_player_hand(ui: &mut egui::Ui, player: &Player, hand: &[String], game: &Game) {
     ui.label(format!("{}:", player.name));
-    for (i, card) in hand.iter().enumerate() {
-        let card_color = match player.hand.cards[i].color {
-            Color::Red => Color32::WHITE,
-            Color::Blue => Color32::WHITE,
-            Color::Yellow => Color32::BLACK,
-            Color::Green => Color32::BLACK,
-            Color::Black => Color32::WHITE,
-        };
 
-        let color = match player.hand.cards[i].color {
-            Color::Red => Color32::RED,
-            Color::Blue => Color32::BLUE,
-            Color::Yellow => Color32::YELLOW,
-            Color::Green => Color32::GREEN,
-            Color::Black => Color32::BLACK,
-        };
-
-        ui.label(
-            RichText::new(card)
-                .background_color(color)
-                .color(card_color)
+    if player.name == game.players[game.current_player].name {
+        for (i, card) in hand.iter().enumerate() {
+            let card_color = match player.hand.cards[i].color {
+                Color::Red => Color32::WHITE,
+                Color::Blue => Color32::WHITE,
+                Color::Yellow => Color32::BLACK,
+                Color::Green => Color32::BLACK,
+                Color::Black => Color32::WHITE,
+            };
+    
+            let color = match player.hand.cards[i].color {
+                Color::Red => Color32::RED,
+                Color::Blue => Color32::BLUE,
+                Color::Yellow => Color32::YELLOW,
+                Color::Green => Color32::GREEN,
+                Color::Black => Color32::BLACK,
+            };
+    
+            ui.label(
+                RichText::new(card)
+                    .background_color(color)
+                    .color(card_color)
+            );
+        }
+    } else {
+        ui.label(RichText::new(format!("{} Cards", player.hand.cards.len()))
+            .background_color(Color32::WHITE)
+            .color(Color32::BLACK)
         );
-    }                
+    }
+                
 }
 
 fn get_current_hand(game: &Game) -> Vec<String> {
