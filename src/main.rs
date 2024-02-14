@@ -5,7 +5,7 @@ use eframe::{egui::{self, RichText}, epaint::Color32};
 #[derive(Debug, Clone)]
 struct Card {
     number: String,
-    color: Color,
+    color: Color32,
 }
 
 struct Deck { cards: Vec<Card> }
@@ -20,7 +20,7 @@ impl Deck {
 
     fn initialize(&mut self) {
         self.cards.clear();
-        let colors = [Color::Red, Color::Blue, Color::Yellow, Color::Green];
+        let colors = [Color32::RED, Color32::BLUE, Color32::YELLOW, Color32::GREEN];
 
         for color in colors.iter() {
             self.cards.push(Card { number: "0".to_string(), color: *color});
@@ -32,8 +32,8 @@ impl Deck {
             self.cards.extend((0..2).map(|_| Card { number: "Reverse".to_string(), color: *color}));
             self.cards.extend((0..2).map(|_| Card { number: "Skip".to_string(), color: *color}));
 
-            self.cards.push(Card { number: "Wild_+4".to_string(), color: Color::Black});
-            self.cards.push(Card { number: "Wild".to_string(), color: Color::Black});
+            self.cards.push(Card { number: "Wild_+4".to_string(), color: Color32::BLACK});
+            self.cards.push(Card { number: "Wild".to_string(), color: Color32::BLACK});
         }
     }
 
@@ -44,15 +44,6 @@ impl Deck {
     fn deal(&mut self, num_cards: usize) -> Vec<Card> {
         self.cards.drain(..num_cards).collect()
     }
-}
-
-#[derive(Debug, Copy, Clone)]
-enum Color {
-    Red,
-    Blue,
-    Yellow,
-    Green,
-    Black,
 }
 
 #[derive(Debug)]
@@ -67,6 +58,7 @@ struct Player {
 
 enum GameStatus {
     PlayerWon(String),
+    GameOver(String),
     GameContinues,
 }
 
@@ -76,6 +68,7 @@ struct Game {
     deck: Deck,
     discard_pile: Deck,
     current_player: usize,
+    status: GameStatus,
 }
 
 impl Game {
@@ -93,6 +86,7 @@ impl Game {
             deck,
             discard_pile: Deck { cards: Vec::new() },
             current_player: 0,
+            status: GameStatus::GameContinues,
         };
 
         game.deal_cards();
@@ -110,24 +104,22 @@ impl Game {
     }
 
     // Filler code, no logic yet.
-    fn play_card(&mut self) -> GameStatus {
+    fn play_card(&mut self) {
         let card = self.players[self.current_player].hand.cards.pop();
-
+    
         match card {
             Some(card) => {
                 self.current_card = Some(card.clone());
-                
-                // Print current card function.
-
+                    
+                // Print current card function (WIP). 
+    
                 self.discard_pile.cards.push(card);
-
+    
                 if self.players[self.current_player].hand.cards.is_empty() {
-                    GameStatus::PlayerWon(self.players[self.current_player].name.clone())
-                } else {
-                    GameStatus::GameContinues
+                    self.status = GameStatus::PlayerWon(self.players[self.current_player].name.clone());
                 }
             },
-            None => GameStatus::GameContinues,
+            None => (),
         }
     }
 
@@ -158,7 +150,7 @@ fn main() -> eframe::Result<()> {
     env_logger::init(); 
 
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 262.0]),
+        viewport: egui::ViewportBuilder::default().with_inner_size([400.0, 275.0]),
         ..Default::default()
     };
 
@@ -186,21 +178,28 @@ fn main() -> eframe::Result<()> {
                         game.next_turn();
                     }
                     if ui.button("Play Card").clicked() {
-                        match game.play_card() {
-                            GameStatus::PlayerWon(name) => { 
+                        game.play_card();
+                        match &game.status {
+                            GameStatus::PlayerWon(name) => {
                                 println!("{} won!!", name);
-                                print!("Press 'Enter' to exit program.");
-                                io::stdout().flush().unwrap();
-                                io::stdin().read_line(&mut String::new()).unwrap();
-                                std::process::exit(0)
-                            }
-                            GameStatus::GameContinues => (),
+                                game.status = GameStatus::GameOver(name.clone());
+                            },
+                            _ => (),
                         }
                     }
                     if ui.button("Draw Card").clicked() {
                         game.draw_card();
                     }
-                })
+                });
+                match &game.status {
+                    GameStatus::GameOver(winner) => {
+                        ui.label(format!("{} won!!", winner));
+                        if ui.button("Quit").clicked() {
+                            std::process::exit(0);
+                        }
+                    },
+                    _ => (),
+                }
             })
         });
     })
@@ -228,21 +227,14 @@ fn display_player_hand(ui: &mut egui::Ui, player: &Player, hand: &[String], game
 
 fn get_card_colors(card: &Card) -> (Color32, Color32) {
     let card_color = match card.color {
-        Color::Red => Color32::WHITE,
-        Color::Blue => Color32::WHITE,
-        Color::Yellow => Color32::BLACK,
-        Color::Green => Color32::BLACK,
-        Color::Black => Color32::WHITE,
+        Color32::RED => Color32::WHITE,
+        Color32::BLUE => Color32::WHITE,
+        Color32::YELLOW => Color32::BLACK,
+        Color32::GREEN => Color32::BLACK,
+        _ => Color32::WHITE,
     };
 
-    let color = match card.color {
-        Color::Red => Color32::RED,
-        Color::Blue => Color32::BLUE,
-        Color::Yellow => Color32::YELLOW,
-        Color::Green => Color32::GREEN,
-        Color::Black => Color32::BLACK,
-    };
-
+    let color = card.color;
     (card_color, color)
 }
 
